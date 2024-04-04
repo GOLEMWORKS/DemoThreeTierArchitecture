@@ -1,12 +1,121 @@
 ﻿@page "/"
 @using Business.Entities
+@using Business.DTOs
+@using NetcodeHub.Packages.Components.Toast
+@using NetcodeHub.Packages.Components.Modal
+@using BlazorWasm.Services
+@using NetcodeHub.Packages.Components.Validations.OnInput
+@inject IEmployeeService emp
+@inject ToastService toastService
 
-<PageTitle>Home</PageTitle>
+<div class="row">
+    <div class="col-lg-6">
+        <EditForm Model="employee" OnValidSubmit="Save">
+            <DataAnnotationsValidator />
+            <FloatingText @bind-Value="employee.Name"
+                            Label="Полное имя"
+                            Placeholder="Иван Иванов"
+                            class="form-control mb-3"/>
+            <ValidationMessage For="()=>employee.Name" />
 
-<h1>Hello, world!</h1>
+            <FloatingTextArea @bind-Value="employee.Address"
+                               Label="Адрес проживания"
+                               Placeholder="ул.Пушкина 12 кв.3"
+                               class="form-control mb-3"/>
+            <ValidationMessage For="()=>employee.Address" />
 
-Welcome to your new app.
+            <button class="btn btn-primary mt-5 mb-5" type="submit">Сохранить</button>
+        </EditForm>
+    </div>
 
+    <div class="col-lg-6">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Имя</th>
+                    <th>Адрес</th>
+                    <th>Действие</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Employees is not null)
+                {
+                    foreach (var item in Employees)
+                    {
+                        <tr>
+                            <td>@item.Id</td>
+                            <td>@item.Name</td>
+                            <td>@item.Address</td>
+                            <td>
+                                <button class="btn btn-info btn-sm" @onclick="()=>EditClicked(item)">Изменить</button>
+                                <button class="btn btn-danger btn-sm" @onclick="()=>DeleteClicked(item.Id)">Удалить</button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+<Confirmation @ref="confirmation"
+                Instruction="@Instruction"
+                Action="Handle"
+                BoostrapClass="border-danger"
+                CustomStyle="width:300px;"/>
+
+<Toast Duration="@duration" Persist=true @ref="toastService.ToastComponent"/>
 @code {
     Employee employee = new();
+
+    Confirmation? confirmation;
+    string Instruction = "Вы уверены, что хотите сделать это?";
+    int duration = 4000;
+
+    async Task Save()
+    {
+        var response = new ServiceResponse(false, null!);
+        if (employee.Id > 0)
+            response = await emp.UpdateAsync(employee);
+        else
+            response = await emp.AddAsync(employee);
+
+        if (!response.Flag)
+        {
+            duration = 5000;
+            toastService.ShowErrorToast("Alert", response.Message);
+            return;
+        }
+
+        toastService.ShowSuccessToast("Succsess", response.Message);
+        await GetData();
+        employee = new();
+    }
+
+    //private async GetData() => Employees = await emp.GetAsync();
+
+
+    List<Employee> Employees = new();
+    protected override async Task OnInitializedAsync() => await GetData();
+    private async Task GetData() => Employees = await emp.GetAsync();
+
+    void EditClicked(Employee incomEmp) => employee = incomEmp;
+
+    public int DeleteId { get; set; }
+    async void DeleteClicked(int id)
+    {
+        DeleteId = id;
+        await confirmation!.Show();
+    }
+
+    async Task Handle()
+    {
+        if (DeleteId == 0) return;
+
+        var (flag, message) = await emp.DeleteAsync(DeleteId);
+        await GetData();
+        DeleteId = 0;
+        StateHasChanged();
+    }
+
 }
